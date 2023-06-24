@@ -155,7 +155,7 @@ class Verification():
         for step in range(1, self.reachability_steps+1):
             # try to load reachable set
             reachable_set_file = os.path.join(self.reachable_set_path, 
-                                              f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[0])}_{len(self.theta_lbs)}.pkl")
+                                              f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}.pkl")
             try:
                 with open(reachable_set_file, "rb") as f:
                     reachable_set = pickle.load(f)
@@ -194,7 +194,7 @@ class Verification():
                         # save the reachable set
                         if count % 100 == 0:
                             temp_reachable_set_file = os.path.join(self.reachable_set_path, 
-                                                                    f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[0])}_{len(self.theta_lbs)}_temp_{count}.pkl")
+                                                                    f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_temp_{count}.pkl")
                             with open(temp_reachable_set_file, "wb") as f:
                                 pickle.dump(reachable_set, f)
 
