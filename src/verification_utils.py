@@ -5,7 +5,6 @@ from nnenum.settings import Settings
 from nnenum.lp_star import LpStar
 from nnenum.util import compress_init_box
 import math
-from tqdm import tqdm
 from collections import defaultdict
 import pickle
 
@@ -25,13 +24,16 @@ class Verification():
         self.reachability_steps = reachability_steps
         self.reachable_set_path = reachable_set_path
 
+        # mkdir if not exist
+        os.mkdir(self.reachable_set_path) if not os.path.exists(self.reachable_set_path) else None
+
         # set nneum settings
         nnenum.set_exact_settings()
         Settings.ONNX_WHITELIST.append("TaxiNetDynamics")
         Settings.CONTRACT_ZONOTOPE_LP = False # contract zonotope using LPs (even more accurate prefilter, but even slower)
         Settings.CONTRACT_LP_OPTIMIZED = False # use optimized lp contraction
         Settings.GLPK_TIMEOUT = 10
-        Settings.PRINT_OUTPUT = True
+        Settings.PRINT_OUTPUT = False
         Settings.TIMING_STATS = False
         Settings.RESULT_SAVE_STARS = True
 
@@ -168,7 +170,9 @@ class Verification():
                     for theta_idx, (theta_lb, theta_ub) in enumerate(zip(self.theta_lbs, self.theta_ubs)):
                         count += 1
                         # if any reachable set with less steps is empty (means out of the range), then skip
-                        if step > 1 and len(reachable_set_multiple_steps[step-1][(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])]) == 0:
+                        if step > 1 and \
+                            (len(reachable_set_multiple_steps[step-1][(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])]) == 0 or \
+                                reachable_set_multiple_steps[step-1][(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])] == {-1, -1, -1, -1}):
                             reachable_set[(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])] = set()
                             continue
                         
@@ -179,7 +183,11 @@ class Verification():
                         star = LpStar(init_bm, init_bias, init_box)
                         print(f"Computing reachable set for p_idx={p_idx}, theta_idx={theta_idx}, reachable_step={step}")
                         result = nnenum.enumerate_network(star, network)
-                        reachable_cells = self.get_reachable_cells(result.stars)
+                        if result.result_str == "error":
+                            reachable_cells = set()
+                            reachable_cells.add((-1, -1, -1, -1))
+                        else:
+                            reachable_cells = self.get_reachable_cells(result.stars)
 
                         reachable_set[(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])] = reachable_cells
 
