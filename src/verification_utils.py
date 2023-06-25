@@ -91,19 +91,19 @@ class Verification():
 
             ## p_mat * p - ita <= p_ub - p_bias
             p_mat_1 = np.hstack((p_mat, -1))
-            star.lpi.add_dense_row(p_mat_1, p_ub - p_bias, False)
+            star.lpi.add_dense_row(p_mat_1, p_ub - p_bias)
 
             ## -p_mat * p - ita <= -p_lb + p_bias
             p_mat_2 = np.hstack((-p_mat, -1))
-            star.lpi.add_dense_row(p_mat_2, -p_lb + p_bias, False)
+            star.lpi.add_dense_row(p_mat_2, -p_lb + p_bias)
 
             ## theta_mat * theta - ita <= theta_ub - theta_bias
             theta_mat_1 = np.hstack((theta_mat, -1))
-            star.lpi.add_dense_row(theta_mat_1, theta_ub - theta_bias, False)
+            star.lpi.add_dense_row(theta_mat_1, theta_ub - theta_bias)
 
             ## -theta_mat * theta - ita <= -theta_lb + theta_bias
             theta_mat_2 = np.hstack((-theta_mat, -1))
-            star.lpi.add_dense_row(theta_mat_2, -theta_lb + theta_bias, False)
+            star.lpi.add_dense_row(theta_mat_2, -theta_lb + theta_bias)
         
         else:
             rhs = star.lpi.get_rhs()
@@ -202,6 +202,51 @@ class Verification():
                 with open(reachable_set_file, "wb") as f:
                     pickle.dump(reachable_set, f)
 
+    def compute_not_solved_reachable_set(self):
+        reachable_set_multiple_steps = dict()
+        for step in range(1, self.reachability_steps+1):
+            # try to load reachable set
+            reachable_set_file = os.path.join(self.reachable_set_path, 
+                                              f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}.pkl")
+            reachable_set_new_file = os.path.join(self.reachable_set_path, 
+                                              f"reachable_set_new_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}.pkl")
+            assert os.path.exists(reachable_set_file), f"Reachable set for step {step} does not exist."
+            with open(reachable_set_file, "rb") as f:
+                reachable_set = pickle.load(f)
+            reachable_set_multiple_steps[step] = reachable_set
+            print(f"Reachable set for step {step} already exists.")
+
+            network = self.networks[step-1]
+            reachable_set = defaultdict(set)
+            for idx, (cell, sets) in enumerate(reachable_set_multiple_steps[step].items()):
+                if sets == {(-1, -1, -1, -1)}:
+                    p_lb = cell[0]
+                    p_ub = cell[1]
+                    theta_lb = cell[2]
+                    theta_ub = cell[3]
+                    init_box = [[-0.8, 0.8], [-0.8, 0.8]]
+                    init_box.extend([[p_lb, p_ub], [theta_lb, theta_ub]])
+                    init_box = np.array(init_box, dtype=np.float32)
+                    init_bm, init_bias, init_box = compress_init_box(init_box)
+                    star = LpStar(init_bm, init_bias, init_box)
+                    print(f"Recomputing reachable set using tolerance split for p_lb={p_lb}, theta_lb={theta_lb}, reachable_step={step}")
+                    for split_tolerance in [1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]:
+                        print(f"split_tolerance={split_tolerance}")
+                        Settings.SPLIT_TOLERANCE = split_tolerance # small outputs get rounded to zero when deciding if splitting is possible
+                        result = nnenum.enumerate_network(star, network)
+                        if result.result_str != "error":
+                            break
+                    if result.result_str == "error":
+                        reachable_cells = set()
+                        reachable_cells.add((-1, -1, -1, -1))
+                    else:
+                        reachable_cells = self.get_reachable_cells(result.stars)
+                    reachable_set[cell] = reachable_cells
+
+            reachable_set_multiple_steps[step] = reachable_set
+            with open(reachable_set_new_file, "wb") as f:
+                pickle.dump(reachable_set, f)
+        
 
 if __name__ == "__main__":
     veri = Verification(p_range=[-5.0, 0.0], theta_range=[-30.0, 30.0], reachability_steps=3, p_num_bin=128//4, theta_num_bin=128)
