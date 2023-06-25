@@ -9,7 +9,7 @@ from collections import defaultdict
 import pickle
 
 class Verification():
-    def __init__(self, onnx_filepath="./models/", reachable_set_path="./reachable_sets", p_range=[-10, 10], p_num_bin=128, theta_range=[-30, 30], theta_num_bin=128, reachability_steps=2) -> None:
+    def __init__(self, onnx_filepath="./models/", reachable_set_path="./reachable_sets", p_range=[-10, 10], p_num_bin=128, theta_range=[-30, 30], theta_num_bin=128, reachability_steps=2, server_id=1, server_total_num=16) -> None:
         self.p_bins = np.linspace(p_range[0], p_range[1], p_num_bin+1, endpoint=True)
         self.p_lbs = np.array(self.p_bins[:-1],dtype=np.float32)
         self.p_ubs = np.array(self.p_bins[1:], dtype=np.float32)
@@ -23,6 +23,10 @@ class Verification():
 
         self.reachability_steps = reachability_steps
         self.reachable_set_path = reachable_set_path
+
+        self.server_id = server_id
+        self.server_total_num = server_total_num
+        assert 0<self.server_id <= self.server_total_num
 
         # mkdir if not exist
         os.mkdir(self.reachable_set_path) if not os.path.exists(self.reachable_set_path) else None
@@ -53,7 +57,7 @@ class Verification():
         theta_lb = star.minimize_output(1, False)
 
         # the cells may be out of the range, filter them out
-        if p_ub < self.p_lbs[0] or p_lb > self.p_ubs[-1] or theta_ub < self.theta_lbs[0] or theta_lb > self.theta_ubs[-1]:
+        if p_ub < self.p_lbs[0] or p_lb > self.p_ubs[-1]:
             return [[-1, -1], [-1, -1]]
 
         # get the cell index
@@ -129,9 +133,11 @@ class Verification():
             # compute the interval enclosure for the star set
             interval_enclosure = self.compute_interval_enclosure(star)
 
-            ## if the star is out of the range, then skip
+            ## if the star is out of the range, then clear the reachable cells
             if interval_enclosure[0][0] == -1:
-                continue
+                reachable_cells = set()
+                reachable_cells.add((-2, -2, -2, -2))
+                break
 
             assert interval_enclosure[0][0] <= interval_enclosure[0][1] - 1
             assert interval_enclosure[1][0] <= interval_enclosure[1][1] - 1
@@ -155,7 +161,7 @@ class Verification():
         for step in range(1, self.reachability_steps+1):
             # try to load reachable set
             reachable_set_file = os.path.join(self.reachable_set_path, 
-                                              f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}.pkl")
+                                              f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_{self.server_id}_{self.server_total_num}.pkl")
             try:
                 with open(reachable_set_file, "rb") as f:
                     reachable_set = pickle.load(f)
@@ -166,7 +172,10 @@ class Verification():
                 reachable_set = defaultdict(set)
 
                 count = 0
-                for p_idx, (p_lb, p_ub) in enumerate(zip(self.p_lbs, self.p_ubs)):
+                assert len(self.p_lbs) % self.server_total_num == 0
+                start_point = len(self.p_lbs) // self.server_total_num * (self.server_id-1)
+                end_point = len(self.p_lbs) // self.server_total_num * (self.server_id)
+                for p_idx, (p_lb, p_ub) in enumerate(zip(self.p_lbs[start_point:end_point], self.p_ubs[start_point:end_point])):
                     for theta_idx, (theta_lb, theta_ub) in enumerate(zip(self.theta_lbs, self.theta_ubs)):
                         count += 1
                         # if any reachable set with less steps is empty (means out of the range), then skip
@@ -182,26 +191,32 @@ class Verification():
                         init_bm, init_bias, init_box = compress_init_box(init_box)
                         star = LpStar(init_bm, init_bias, init_box)
                         print(f"Computing reachable set for p_idx={p_idx}, theta_idx={theta_idx}, reachable_step={step}")
-                        result = nnenum.enumerate_network(star, network)
+                        
+                        for split_tolerance in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]:
+                            print(f"split_tolerance={split_tolerance}")
+                            Settings.SPLIT_TOLERANCE = split_tolerance # small outputs get rounded to zero when deciding if splitting is possible
+                            result = nnenum.enumerate_network(star, network)
+                            if result.result_str != "error":
+                                break
                         if result.result_str == "error":
                             reachable_cells = set()
                             reachable_cells.add((-1, -1, -1, -1))
                         else:
                             reachable_cells = self.get_reachable_cells(result.stars)
-
+                        print(reachable_cells)
                         reachable_set[(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])] = reachable_cells
 
                         # save the reachable set
                         if count % 100 == 0:
                             temp_reachable_set_file = os.path.join(self.reachable_set_path, 
-                                                                    f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_temp_{count}.pkl")
+                                                                    f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_{self.server_id}_{self.server_total_num}_temp_{count}.pkl")
                             with open(temp_reachable_set_file, "wb") as f:
                                 pickle.dump(reachable_set, f)
 
                 reachable_set_multiple_steps[step] = reachable_set
                 with open(reachable_set_file, "wb") as f:
                     pickle.dump(reachable_set, f)
-
+    """
     def compute_not_solved_reachable_set(self):
         reachable_set_multiple_steps = dict()
         for step in range(1, self.reachability_steps+1):
@@ -246,8 +261,9 @@ class Verification():
             reachable_set_multiple_steps[step] = reachable_set
             with open(reachable_set_new_file, "wb") as f:
                 pickle.dump(reachable_set, f)
+        """
         
 
 if __name__ == "__main__":
-    veri = Verification(p_range=[-5.0, 0.0], theta_range=[-30.0, 30.0], reachability_steps=3, p_num_bin=128//4, theta_num_bin=128)
+    veri = Verification(p_range=[-10.0, 10.0], theta_range=[-30.0, 30.0], reachability_steps=3, p_num_bin=128, theta_num_bin=128, server_total_num=16, server_id=1)
     veri.compute_reachable_set()
