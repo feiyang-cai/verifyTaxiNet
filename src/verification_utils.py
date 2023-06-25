@@ -70,6 +70,7 @@ class Verification():
         # filter out the cells out of the range
         p_lb_idx = max(p_lb_idx, 0)
         p_ub_idx = min(p_ub_idx, len(self.p_lbs))
+
         theta_lb_idx = max(theta_lb_idx, 0)
         theta_ub_idx = min(theta_ub_idx, len(self.theta_lbs))
 
@@ -138,6 +139,10 @@ class Verification():
                 reachable_cells = set()
                 reachable_cells.add((-2, -2, -2, -2))
                 break
+            
+            # if the theta out of the range, discard the star
+            if interval_enclosure[1][0] >= len(self.theta_lbs) or interval_enclosure[1][1] <= 0:
+                continue
 
             assert interval_enclosure[0][0] <= interval_enclosure[0][1] - 1
             assert interval_enclosure[1][0] <= interval_enclosure[1][1] - 1
