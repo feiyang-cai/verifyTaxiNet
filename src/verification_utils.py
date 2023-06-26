@@ -180,15 +180,14 @@ class Verification():
                 assert len(self.p_lbs) % self.server_total_num == 0
                 start_point = len(self.p_lbs) // self.server_total_num * (self.server_id-1)
                 end_point = len(self.p_lbs) // self.server_total_num * (self.server_id)
-                for p_idx, (p_lb, p_ub) in enumerate(zip(self.p_lbs[start_point:end_point], self.p_ubs[start_point:end_point])):
-                    for theta_idx, (theta_lb, theta_ub) in enumerate(zip(self.theta_lbs, self.theta_ubs)):
-                        p_idx += start_point
+                for _, (p_lb, p_ub) in enumerate(zip(self.p_lbs[start_point:end_point], self.p_ubs[start_point:end_point])):
+                    for _, (theta_lb, theta_ub) in enumerate(zip(self.theta_lbs, self.theta_ubs)):
                         count += 1
                         # if any reachable set with less steps is empty (means out of the range), then skip
                         if step > 1 and \
-                            (len(reachable_set_multiple_steps[step-1][(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])]) == 0 or \
-                                reachable_set_multiple_steps[step-1][(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])] == {-1, -1, -1, -1}):
-                            reachable_set[(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])] = set()
+                            (len(reachable_set_multiple_steps[step-1][(p_lb, p_ub, theta_lb, theta_ub)]) == 0 or \
+                                reachable_set_multiple_steps[step-1][(p_lb, p_ub, theta_lb, theta_ub)] == {-1, -1, -1, -1}):
+                            reachable_set[(p_lb, p_ub, theta_lb, theta_ub)] = set()
                             continue
                         
                         init_box = [[-0.8, 0.8], [-0.8, 0.8]]
@@ -196,7 +195,7 @@ class Verification():
                         init_box = np.array(init_box, dtype=np.float32)
                         init_bm, init_bias, init_box = compress_init_box(init_box)
                         star = LpStar(init_bm, init_bias, init_box)
-                        print(f"Computing reachable set for p_idx={p_idx}, theta_idx={theta_idx}, reachable_step={step}")
+                        print(f"Computing reachable set for p_lb={p_lb}, theta_lb={theta_lb}, reachable_step={step}")
                         
                         for split_tolerance in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]:
                             print(f"split_tolerance={split_tolerance}")
@@ -210,7 +209,7 @@ class Verification():
                         else:
                             reachable_cells = self.get_reachable_cells(result.stars)
                         print(reachable_cells)
-                        reachable_set[(self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx])] = reachable_cells
+                        reachable_set[(p_lb, p_ub, theta_lb, theta_ub)] = reachable_cells
 
                         # save the reachable set
                         if count % 100 == 0:
