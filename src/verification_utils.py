@@ -182,6 +182,7 @@ class Verification():
                 end_point = len(self.p_lbs) // self.server_total_num * (self.server_id)
                 for p_idx, (p_lb, p_ub) in enumerate(zip(self.p_lbs[start_point:end_point], self.p_ubs[start_point:end_point])):
                     for theta_idx, (theta_lb, theta_ub) in enumerate(zip(self.theta_lbs, self.theta_ubs)):
+                        p_idx += start_point
                         count += 1
                         # if any reachable set with less steps is empty (means out of the range), then skip
                         if step > 1 and \
