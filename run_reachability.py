@@ -7,8 +7,8 @@ def main():
     parser = argparse.ArgumentParser(description='Description of your program')
 
     # Add the arguments
-    parser.add_argument('--p_range_lb', type=float, default=-10.0, help='Lower bound for p_range')
-    parser.add_argument('--p_range_ub', type=float, default=+10.0, help='Upper bound for p_range')
+    parser.add_argument('--p_range_lb', type=float, default=-11.0, help='Lower bound for p_range')
+    parser.add_argument('--p_range_ub', type=float, default=+11.0, help='Upper bound for p_range')
     parser.add_argument('--p_num_bin', type=int, default=128, help='Number of bins for p')
     parser.add_argument('--theta_range_lb', type=float, default=-30.0, help='Lower bound for theta_range')
     parser.add_argument('--theta_range_ub', type=float, default=+30.0, help='Upper bound for theta_range')
