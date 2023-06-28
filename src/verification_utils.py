@@ -183,7 +183,6 @@ class Verification():
                 network = self.networks[step-1]
                 session = self.sessions[step-1]
                 reachable_set = defaultdict(set)
-                print(reachable_set_multiple_steps[step-1])
 
                 count = 0
                 assert len(self.p_lbs) % self.server_total_num == 0
