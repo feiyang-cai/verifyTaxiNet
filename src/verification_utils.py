@@ -183,6 +183,7 @@ class Verification():
                 network = self.networks[step-1]
                 session = self.sessions[step-1]
                 reachable_set = defaultdict(set)
+                print(reachable_set_multiple_steps[step-1])
 
                 count = 0
                 assert len(self.p_lbs) % self.server_total_num == 0
@@ -196,9 +197,10 @@ class Verification():
                             assert len(reachable_set_multiple_steps[step-1][(p_lb, p_ub, theta_lb, theta_ub)]) > 0, "reachable set is empty"
                             if reachable_set_multiple_steps[step-1][(p_lb, p_ub, theta_lb, theta_ub)] == {(-1, -1, -1, -1)}:
                                 reachable_set[(p_lb, p_ub, theta_lb, theta_ub)].add((-1, -1, -1, -1))
+                                continue
                             elif reachable_set_multiple_steps[step-1][(p_lb, p_ub, theta_lb, theta_ub)] == {(-2, -2, -2, -2)}:
                                 reachable_set[(p_lb, p_ub, theta_lb, theta_ub)].add((-2, -2, -2, -2))
-                            continue
+                                continue
                         
                         reachable_cells = set()
                         init_box = [[-0.8, 0.8], [-0.8, 0.8]]
