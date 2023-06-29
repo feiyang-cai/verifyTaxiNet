@@ -8,6 +8,8 @@ import math
 from collections import defaultdict
 import pickle
 import onnxruntime as ort
+import glob
+import time
 
 class Verification():
     def __init__(self, onnx_filepath="./models/", reachable_set_path="./reachable_sets", p_range=[-11, 11], p_num_bin=128, theta_range=[-30, 30], theta_num_bin=128, reachability_steps=2, server_id=1, server_total_num=16) -> None:
@@ -174,22 +176,47 @@ class Verification():
             # try to load reachable set
             reachable_set_file = os.path.join(self.reachable_set_path, 
                                               f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_{self.server_id}_{self.server_total_num}.pkl")
-            try:
+            
+            emergency_save_file = os.path.join(self.reachable_set_path,
+                                               f"reachable_set_analysis_step_{step}__{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_{self.server_id}_{self.server_total_num}_emergency_save.pkl")
+
+            reachable_set = defaultdict(set)
+            count = 0
+            if os.path.exists(reachable_set_file):
+                print(f"Reachable set for step {step} already exists.")
                 with open(reachable_set_file, "rb") as f:
                     reachable_set = pickle.load(f)
                 reachable_set_multiple_steps[step] = reachable_set
-                print(f"Reachable set for step {step} already exists.")
-            except:
+                continue
+            else:
+                if os.path.exists(emergency_save_file):
+                    print(f"find emergency save file for step {step}")
+                    with open(emergency_save_file, "rb") as f:
+                        reachable_set = pickle.load(f)
+                else: 
+                    temp_files_string = f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_{self.server_id}_{self.server_total_num}_temp_*.pkl"
+                    temp_files = glob.glob(os.path.join(self.reachable_set_path, temp_files_string))
+                    if len(temp_files) == 0:
+                        print(f"Reachable set for step {step} does not exist. Start computing...")
+                    else:
+                        temp_files = sorted(temp_files, key=lambda x: int(x.split("_")[-1][:-4]))
+                        file = temp_files[-1]
+                        with open(file, "rb") as f:
+                            reachable_set = pickle.load(f)
+                        print(f"Reachable set for step {step} loaded from {file}.")
+            try:        
                 network = self.networks[step-1]
                 session = self.sessions[step-1]
-                reachable_set = defaultdict(set)
+                count = len(reachable_set)
 
-                count = 0
                 assert len(self.p_lbs) % self.server_total_num == 0
                 start_point = len(self.p_lbs) // self.server_total_num * (self.server_id-1)
                 end_point = len(self.p_lbs) // self.server_total_num * (self.server_id)
                 for _, (p_lb, p_ub) in enumerate(zip(self.p_lbs[start_point:end_point], self.p_ubs[start_point:end_point])):
                     for _, (theta_lb, theta_ub) in enumerate(zip(self.theta_lbs, self.theta_ubs)):
+                        if (p_lb, p_ub, theta_lb, theta_ub) in reachable_set:
+                            continue
+                        
                         count += 1
                         # if any reachable set with less steps is empty (means out of the range), then skip
                         if step > 1: 
@@ -201,6 +228,7 @@ class Verification():
                                 reachable_set[(p_lb, p_ub, theta_lb, theta_ub)].add((-2, -2, -2, -2))
                                 continue
                         
+                        t_start_cell = time.time()    
                         reachable_cells = set()
                         init_box = [[-0.8, 0.8], [-0.8, 0.8]]
                         init_box.extend([[p_lb, p_ub], [theta_lb, theta_ub]])
@@ -217,43 +245,56 @@ class Verification():
                         input_name = session.get_inputs()[0].name
                         input_shape = session.get_inputs()[0].shape
                         output_name = session.get_outputs()[0].name
+
+                        t_start_sim = time.time()
                         for z_i, p_i, theta_i in zip(z, p, theta):
+                            assert p_i<=p_ub and p_i>=p_lb
+                            assert theta_i<=theta_ub and theta_i>=theta_lb
                             input_0 = np.concatenate([z_i, p_i, theta_i]).astype(np.float32).reshape(input_shape)
                             res = session.run([output_name], {input_name: input_0})
-                            _, _, p, theta = res[0][0]
+                            _, _, p_, theta_ = res[0][0]
                             # initial check the reachable set
                             ## the cells may be out of the range, filter them out
-                            if p < self.p_lbs[0] or p > self.p_ubs[-1]:
+                            if p_ < self.p_lbs[0] or p_ > self.p_ubs[-1]:
                                 reachable_cells = set()
                                 reachable_cells.add((-2, -2, -2, -2))
                                 break
 
-                            if theta < self.theta_lbs[0] or theta > self.theta_ubs[-1]:
+                            if theta_ < self.theta_lbs[0] or theta_ > self.theta_ubs[-1]:
                                 reachable_cells.add((-3, -3, -3, -3))
                                 continue
 
                             # get the cell index
-                            p_idx = math.floor((p - self.p_lbs[0])/(self.p_ubs[0]-self.p_lbs[0])) # floor
-                            theta_idx = math.floor((theta - self.theta_lbs[0])/(self.theta_ubs[0]-self.theta_lbs[0])) # floor
+                            p_idx = math.floor((p_ - self.p_lbs[0])/(self.p_ubs[0]-self.p_lbs[0])) # floor
+                            theta_idx = math.floor((theta_ - self.theta_lbs[0])/(self.theta_ubs[0]-self.theta_lbs[0])) # floor
                             assert 0 <= p_idx < len(self.p_lbs), "p_idx out of range"
                             assert 0 <= theta_idx < len(self.theta_lbs), "theta_idx out of range"
 
                             reachable_cells.add((self.p_lbs[p_idx], self.p_ubs[p_idx], self.theta_lbs[theta_idx], self.theta_ubs[theta_idx]))
+                        t_sim = time.time() - t_start_sim
 
+                        t_enumerate_nn = dict()
+                        t_get_reachable_cells = None
                         if not reachable_cells == {(-2, -2, -2, -2)}:
-                            for split_tolerance in [1e-9, 1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]:
+                            for split_tolerance in [1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2]:
                                 print(f"split_tolerance={split_tolerance}")
                                 Settings.SPLIT_TOLERANCE = split_tolerance # small outputs get rounded to zero when deciding if splitting is possible
                                 result = nnenum.enumerate_network(star, network)
+                                t_enumerate_nn[split_tolerance] = result.total_secs
                                 if result.result_str != "error":
                                     break
                             if result.result_str == "error":
                                 reachable_cells = set()
                                 reachable_cells.add((-1, -1, -1, -1))
                             else:
+                                t_start_get_reachable_cells = time.time()
                                 reachable_cells = self.get_reachable_cells(result.stars, reachable_cells)
+                                t_get_reachable_cells = time.time() - t_start_get_reachable_cells
                         reachable_set[(p_lb, p_ub, theta_lb, theta_ub)] = reachable_cells
+                        total_cell_time = time.time() - t_start_cell
                         print(reachable_cells)
+                        print(t_sim, t_enumerate_nn, t_get_reachable_cells, total_cell_time)
+                        print("--------------------------------------------------------")
 
                         # save the reachable set
                         if count % 100 == 0:
@@ -265,6 +306,11 @@ class Verification():
                 reachable_set_multiple_steps[step] = reachable_set
                 with open(reachable_set_file, "wb") as f:
                     pickle.dump(reachable_set, f)
+            except:
+                print(f"Error in computing reachable set for step={step}")
+                with open(emergency_save_file, "wb") as f:
+                    pickle.dump(reachable_set, f)
+                raise Exception("Error in computing reachable set for step={step}")
         
 
 if __name__ == "__main__":
