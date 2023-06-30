@@ -37,8 +37,8 @@ class Verification():
         # set nneum settings
         nnenum.set_exact_settings()
         Settings.ONNX_WHITELIST.append("TaxiNetDynamics")
-        Settings.CONTRACT_ZONOTOPE_LP = False # contract zonotope using LPs (even more accurate prefilter, but even slower)
-        Settings.CONTRACT_LP_OPTIMIZED = False # use optimized lp contraction
+        #Settings.CONTRACT_ZONOTOPE_LP = False # contract zonotope using LPs (even more accurate prefilter, but even slower)
+        #Settings.CONTRACT_LP_OPTIMIZED = False # use optimized lp contraction
         Settings.GLPK_TIMEOUT = 10
         Settings.PRINT_OUTPUT = False
         Settings.TIMING_STATS = False
