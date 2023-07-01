@@ -176,17 +176,24 @@ class Verification():
             # try to load reachable set
             reachable_set_file = os.path.join(self.reachable_set_path, 
                                               f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_{self.server_id}_{self.server_total_num}.pkl")
+            reachable_set_file_1 = os.path.join(self.reachable_set_path, 
+                                              f"reachable_set_analysis_step_{step}_{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}.pkl")
             
             emergency_save_file = os.path.join(self.reachable_set_path,
                                                f"reachable_set_analysis_step_{step}__{int(self.p_lbs[0])}_{int(self.p_ubs[-1])}_{len(self.p_lbs)}_{int(self.theta_lbs[0])}_{int(self.theta_ubs[-1])}_{len(self.theta_lbs)}_{self.server_id}_{self.server_total_num}_emergency_save.pkl")
 
             reachable_set = defaultdict(set)
             count = 0
-            if os.path.exists(reachable_set_file):
+            if os.path.exists(reachable_set_file) or os.path.exists(reachable_set_file_1):
                 print(f"Reachable set for step {step} already exists.")
-                with open(reachable_set_file, "rb") as f:
-                    reachable_set = pickle.load(f)
-                reachable_set_multiple_steps[step] = reachable_set
+                if os.path.exists(reachable_set_file):
+                    with open(reachable_set_file, "rb") as f:
+                        reachable_set = pickle.load(f)
+                    reachable_set_multiple_steps[step] = reachable_set
+                else:
+                    with open(reachable_set_file_1, "rb") as f:
+                        reachable_set = pickle.load(f)
+                    reachable_set_multiple_steps[step] = reachable_set
                 continue
             else:
                 if os.path.exists(emergency_save_file):
